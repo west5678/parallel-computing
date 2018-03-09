@@ -1,11 +1,11 @@
 #include <iostream>
+#include <omp.h>
 #include <vector>
 #include <stdlib.h>
 
-//#include<grvy.h>	//grvy for performance timing
 #include<sys/time.h>
 #include<time.h>
-#include<unistd.h>
+
 
 //timer class
 class Timer
@@ -56,6 +56,7 @@ void smooth (Array2D& y, const Array2D x, int n, float a, float b,
 	for (int i = 0; i < n2; i++){
 		y.push_back(std::vector<float> (n2, 0.0));
 	}
+#pragma omp for
 	for (int i=1; i<=n; i++){
 		for (int j=1; j<=n; j++){
 			y[i][j] = a * (x[i-1][j-1] + x[i-1][j+1] + x[i+1][j-1]+ x[i+1][j+1]) 					+ b * (x[i-1][j] + x[i+1][j] + x[i][j-1] + x[i][j+1]) 
@@ -68,6 +69,7 @@ void smooth (Array2D& y, const Array2D x, int n, float a, float b,
 void count(const Array2D x, const int n, const float t, int &res){
 	//the boundary is not considered
 	int n2 = n+2;
+#pragma omp for
 	for (int i=1; i <= n; i++){
 		for (int j=1; j <= n; j++){
 			if (x[i][j] < t){
@@ -78,7 +80,12 @@ void count(const Array2D x, const int n, const float t, int &res){
 }
 
 int main(){
-	
+
+	#pragma omp parallel
+	{
+		std::cout << omp_get_thread_num() << std::endl;
+	}
+
 	/* timer of class Timer */
 	Timer timer, timer2;
 
