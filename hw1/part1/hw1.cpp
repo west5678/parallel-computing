@@ -52,7 +52,7 @@ void smooth (float* y, float* x, int n,
 			float a, float b, float c){
 	int j;
 	int n2 = n+2;
-//#pragma omp for private(j)
+#pragma omp for private(j)
 	for (int i=1; i<=n; i++){
 //#pragma omp for 
 		for (j=1; j<=n; j++){
@@ -74,7 +74,7 @@ void count(float* x, const int n, const float t, int &res){
 	//the boundary is not considered
 	int j;
 	int n2 = n+2;
-//#pragma omp for private(j)
+#pragma omp for private(j)
 	for (int i=1; i <= n; i++){
 //#pragma omp for
 		for (j=1; j <= n; j++){
@@ -87,11 +87,11 @@ void count(float* x, const int n, const float t, int &res){
 
 int main(){
 
-/*	#pragma omp parallel
+	#pragma omp parallel
 	{
 		std::cout << omp_get_thread_num() << std::endl;
 	}
-*/
+
 	/* timer of class Timer */
 	Timer timer, timer2;
 
@@ -123,7 +123,7 @@ int main(){
 	
 	//smooth matrix x
 	timer.start("CPU: smooth");
-//#pragma omp parallel
+#pragma omp parallel
 	{
 	smooth(y, x, n, a, b, c);
 	}
@@ -132,13 +132,13 @@ int main(){
 	
 	timer2.start("CPU: Count-XY");
 	  timer.start("CPU: Count-X");
-//#pragma omp parallel reduction(+:nbx)
+#pragma omp parallel reduction(+:nbx)
 	  {
 	  count(x, n, t, nbx);
 	  }
 	  timer.stop();
 	  timer.start("CPU: Count-Y");
-//#pragma omp parallel reduction(+:nby)
+#pragma omp parallel reduction(+:nby)
 	  {
 	  count(y, n, t, nby);
 	  }
@@ -159,7 +159,7 @@ int main(){
 	std::cout << std::endl;
 	std::cout << "Summary" << std::endl;
 	std::cout << "-------" << std::endl;
-//	std::cout << "Number of threads		::"	<< omp_get_num_threads() << std::endl;
+	std::cout << "Number of threads		::"	<< omp_get_num_threads() << std::endl;
 	std::cout << "Number of elements in a row/column		::" << n+2 << std::endl;
 	std::cout << "Number of inner elements in a row/column	::" << n << std::endl;
 	std::cout << "Total number of elements					::" << (n+2)*(n+2) << std::endl;
@@ -175,24 +175,6 @@ int main(){
 	std::cout << "Fraction of elements below threshold		::" << nby / (float)(n*n) << std::endl;
 
 
-/*
-	//Counting of elements below threshold 
-	std::cout << "total number of elements in a column/row of an array: " <<n << std::endl;
-	std::cout << "total number of inner elements in a column/row of an array: " << n - 2 << std::endl;
-	std::cout << "total number of elements in an array: " << n*n << std::endl;
-	std::cout << "total number of inner elements in an array: " << (n-2)*(n-2)<<std::endl;
-	std::cout << "Size of array: " << sizeof(x) << std::endl;
-	std::cout << "# of elements in x below threshold: " << count(x, t) << std::endl;
-	std::cout << "# of elements in y below threshold: " << count(y, t) << std::endl;
-	std::cout << x.size()*x[0].size()*sizeof(x[0][0]) << std::endl;
-*/
-
-	/*
-	gt.EndTimer("Main Program");
-	gt.Finalize();
-	gt.Summarize();
-	gt.Reset();
-*/
 
 
 	return 0;

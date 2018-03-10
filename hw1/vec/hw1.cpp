@@ -39,46 +39,37 @@ void Timer::print()
 
 typedef std::vector<std::vector<float>> Array2D;
 
-void initialize (float* x, int n){
+void initialize (Array2D& x, int n){
 	int n2 = n+2;
 	for (int i = 0; i < n2; i++){
 		for (int j = 0; j < n2; j++){
-			x[i*n2+j] = ( (float)rand()/ (RAND_MAX) );
+			x[i][j] = ( (float)rand()/ (RAND_MAX) );
 		}
 	}
 }
 
-void smooth (float* y, float* x, int n, 
-			float a, float b, float c){
+void smooth (Array2D& y, const Array2D x, int n, float a, float b, 
+	float c){
 	int j;
-	int n2 = n+2;
-//#pragma omp for private(j)
+#pragma omp for private(j)
 	for (int i=1; i<=n; i++){
 //#pragma omp for 
 		for (j=1; j<=n; j++){
-			y[i*n2 + j] = a * (x[(i-1)*n2+(j-1)] + 
-								x[(i-1)*n2+(j+1)] + 
-								x[(i+1)*n2+(j-1)] + 
-								x[(i+1)*n2+(j+1)])
-						+ b * (x[(i-1)*n2+j] + 
-								x[(i+1)*n2+j] + 
-								x[i*n2+(j-1)] + 
-								x[i*n2+(j+1)]) 
-						+ c * x[i*n2+j];
+			y[i][j] = a * (x[i-1][j-1] + x[i-1][j+1] + x[i+1][j-1]+ x[i+1][j+1]) 					+ b * (x[i-1][j] + x[i+1][j] + x[i][j-1] + x[i][j+1]) 
+					+ c * x[i][j];
 		}
 	}
 	//FUNC_END_TIMER;
 }
 
-void count(float* x, const int n, const float t, int &res){
+void count(const Array2D x, const int n, const float t, int &res){
 	//the boundary is not considered
 	int j;
-	int n2 = n+2;
-//#pragma omp for private(j)
+#pragma omp for private(j)
 	for (int i=1; i <= n; i++){
 //#pragma omp for
 		for (j=1; j <= n; j++){
-			if (x[i*n2+j] < t){
+			if (x[i][j] < t){
 				res ++;
 			}
 		}
@@ -87,11 +78,11 @@ void count(float* x, const int n, const float t, int &res){
 
 int main(){
 
-/*	#pragma omp parallel
+	#pragma omp parallel
 	{
 		std::cout << omp_get_thread_num() << std::endl;
 	}
-*/
+
 	/* timer of class Timer */
 	Timer timer, timer2;
 
@@ -100,9 +91,7 @@ int main(){
 	int nbx=0, nby=0;
 
 	//convolution constants
-	float a, b, c, 
-		  t,
-		  *x, *y;
+	float a, b, c, t;
 	a = 0.05;
 	b = 0.1;
 	c = 0.4;
@@ -110,20 +99,18 @@ int main(){
 	//threshold t
 	t = 0.1;
 
-	x = new float[(n+2)*(n+2)];
 	//allocate x
-	//Array2D x(n+2, std::vector<float>(n+2));
+	Array2D x(n+2, std::vector<float>(n+2));
 
-	y = new float[(n+2)*(n+2)];
 	//allocate y
-	//Array2D y(n+2, std::vector<float>(n+2));
+	Array2D y(n+2, std::vector<float>(n+2));
 
 	//initialize x
 	initialize(x, n);	
 	
 	//smooth matrix x
 	timer.start("CPU: smooth");
-//#pragma omp parallel
+#pragma omp parallel
 	{
 	smooth(y, x, n, a, b, c);
 	}
@@ -132,13 +119,13 @@ int main(){
 	
 	timer2.start("CPU: Count-XY");
 	  timer.start("CPU: Count-X");
-//#pragma omp parallel reduction(+:nbx)
+#pragma omp parallel reduction(+:nbx)
 	  {
 	  count(x, n, t, nbx);
 	  }
 	  timer.stop();
 	  timer.start("CPU: Count-Y");
-//#pragma omp parallel reduction(+:nby)
+#pragma omp parallel reduction(+:nby)
 	  {
 	  count(y, n, t, nby);
 	  }
@@ -159,7 +146,7 @@ int main(){
 	std::cout << std::endl;
 	std::cout << "Summary" << std::endl;
 	std::cout << "-------" << std::endl;
-//	std::cout << "Number of threads		::"	<< omp_get_num_threads() << std::endl;
+	std::cout << "Number of threads		::"	<< omp_get_num_threads() << std::endl;
 	std::cout << "Number of elements in a row/column		::" << n+2 << std::endl;
 	std::cout << "Number of inner elements in a row/column	::" << n << std::endl;
 	std::cout << "Total number of elements					::" << (n+2)*(n+2) << std::endl;
@@ -194,6 +181,11 @@ int main(){
 	gt.Reset();
 */
 
+	for (int i=0; i<3; i++){
+		for (int j=0; j<3; j++){
+			std::cout << x[i][j] << "\t" << y[i][j] << std::endl;
+		}
+	}
 
 	return 0;
 }
