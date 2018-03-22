@@ -39,46 +39,38 @@ void Timer::print()
 
 typedef std::vector<std::vector<float>> Array2D;
 
-void initialize (float* x, int n){
+void initialize (Array2D& x, int n){
 	int n2 = n+2;
 	for (int i = 0; i < n2; i++){
 		for (int j = 0; j < n2; j++){
-			x[i*n2+j] = ( (float)rand()/ (RAND_MAX) );
+			x[i][j] = ( (float)rand()/ (RAND_MAX) );
 		}
 	}
 }
 
-void smooth (float* y, float* x, int n, 
-			float a, float b, float c){
-	int j;
-	int n2 = n+2;
-//#pragma omp for private(j)
-	for (int i=1; i<=n; i++){
+void smooth (Array2D& y, const Array2D x, int n, float a, float b, 
+	float c){
+	int i, j;
+#pragma omp for private(j) schedule(static)
+	for (i=1; i<=n; i++){
+		//std::cout << i << std::endl;
 //#pragma omp for 
 		for (j=1; j<=n; j++){
-			y[i*n2 + j] = a * (x[(i-1)*n2+(j-1)] + 
-								x[(i-1)*n2+(j+1)] + 
-								x[(i+1)*n2+(j-1)] + 
-								x[(i+1)*n2+(j+1)])
-						+ b * (x[(i-1)*n2+j] + 
-								x[(i+1)*n2+j] + 
-								x[i*n2+(j-1)] + 
-								x[i*n2+(j+1)]) 
-						+ c * x[i*n2+j];
+			y[i][j] = a * (x[i-1][j-1] + x[i-1][j+1] + x[i+1][j-1]+ x[i+1][j+1]) 					+ b * (x[i-1][j] + x[i+1][j] + x[i][j-1] + x[i][j+1]) 
+					+ c * x[i][j];
 		}
 	}
 	//FUNC_END_TIMER;
 }
 
-void count(float* x, const int n, const float t, int &res){
+void count(const Array2D x, const int n, const float t, int &res){
 	//the boundary is not considered
 	int j;
-	int n2 = n+2;
-//#pragma omp for private(j)
+#pragma omp for private(j)
 	for (int i=1; i <= n; i++){
 //#pragma omp for
 		for (j=1; j <= n; j++){
-			if (x[i*n2+j] < t){
+			if (x[i][j] < t){
 				res ++;
 			}
 		}
@@ -86,12 +78,19 @@ void count(float* x, const int n, const float t, int &res){
 }
 
 int main(){
-
-/*	#pragma omp parallel
+	int num_thread;
+	#pragma omp parallel
 	{
-		std::cout << omp_get_thread_num() << std::endl;
+		std::cout << omp_get_num_procs() << std::endl;
 	}
-*/
+
+	int num_of_threads;
+#pragma omp parallel 
+	#pragma omp single
+	{
+	num_of_threads = omp_get_num_threads();
+	}
+	
 	/* timer of class Timer */
 	Timer timer, timer2;
 
@@ -100,9 +99,7 @@ int main(){
 	int nbx=0, nby=0;
 
 	//convolution constants
-	float a, b, c, 
-		  t,
-		  *x, *y;
+	float a, b, c, t;
 	a = 0.05;
 	b = 0.1;
 	c = 0.4;
@@ -110,43 +107,37 @@ int main(){
 	//threshold t
 	t = 0.1;
 
-	x = new float[(n+2)*(n+2)];
 	//allocate x
-	//Array2D x(n+2, std::vector<float>(n+2));
+	Array2D x(n+2, std::vector<float>(n+2));
 
-	y = new float[(n+2)*(n+2)];
 	//allocate y
-	//Array2D y(n+2, std::vector<float>(n+2));
+	Array2D y(n+2, std::vector<float>(n+2));
 
 	//initialize x
 	initialize(x, n);	
 	
 	//smooth matrix x
-	timer.start("CPU: smooth");
-//#pragma omp parallel
+	//timer.start("CPU: smooth");
+	double t1 = omp_get_wtime();
+#pragma omp parallel
 	{
 	smooth(y, x, n, a, b, c);
 	}
-	timer.stop();
+	double t2 = omp_get_wtime();
+	//timer.stop();
 
-	
-	timer2.start("CPU: Count-XY");
-	  timer.start("CPU: Count-X");
-//#pragma omp parallel reduction(+:nbx)
+	double t_cnt = omp_get_wtime();	
+#pragma omp parallel reduction(+:nbx)
 	  {
 	  count(x, n, t, nbx);
 	  }
-	  timer.stop();
-	  timer.start("CPU: Count-Y");
-//#pragma omp parallel reduction(+:nby)
+	double t_cnt_x = omp_get_wtime();
+#pragma omp parallel reduction(+:nby)
 	  {
 	  count(y, n, t, nby);
 	  }
-	  timer.stop();
-	timer2.stop();
+	double t_cnt_y = omp_get_wtime();
 
-	timer.print();
-	timer2.print();
 
 	//count elements in first array
 	//count(x, n, t, nbx);
@@ -159,7 +150,7 @@ int main(){
 	std::cout << std::endl;
 	std::cout << "Summary" << std::endl;
 	std::cout << "-------" << std::endl;
-//	std::cout << "Number of threads		::"	<< omp_get_num_threads() << std::endl;
+	std::cout << "Number of threads		::"	<< num_of_threads << std::endl;
 	std::cout << "Number of elements in a row/column		::" << n+2 << std::endl;
 	std::cout << "Number of inner elements in a row/column	::" << n << std::endl;
 	std::cout << "Total number of elements					::" << (n+2)*(n+2) << std::endl;
@@ -175,25 +166,9 @@ int main(){
 	std::cout << "Fraction of elements below threshold		::" << nby / (float)(n*n) << std::endl;
 
 
-/*
-	//Counting of elements below threshold 
-	std::cout << "total number of elements in a column/row of an array: " <<n << std::endl;
-	std::cout << "total number of inner elements in a column/row of an array: " << n - 2 << std::endl;
-	std::cout << "total number of elements in an array: " << n*n << std::endl;
-	std::cout << "total number of inner elements in an array: " << (n-2)*(n-2)<<std::endl;
-	std::cout << "Size of array: " << sizeof(x) << std::endl;
-	std::cout << "# of elements in x below threshold: " << count(x, t) << std::endl;
-	std::cout << "# of elements in y below threshold: " << count(y, t) << std::endl;
-	std::cout << x.size()*x[0].size()*sizeof(x[0][0]) << std::endl;
-*/
-
-	/*
-	gt.EndTimer("Main Program");
-	gt.Finalize();
-	gt.Summarize();
-	gt.Reset();
-*/
-
+	std::cout << "smooth time	::" << t2 - t1 << std::endl;
+	std::cout << "count-x time	::" << t_cnt_x - t_cnt << std::endl;
+	std::cout << "count-y time	::" << t_cnt_y - t_cnt_x << std::endl;
 
 	return 0;
 }

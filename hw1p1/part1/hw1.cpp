@@ -2,42 +2,10 @@
 #include <omp.h>
 #include <vector>
 #include <stdlib.h>
-
+#include <chrono>
 #include<sys/time.h>
 #include<time.h>
 
-
-//timer class
-class Timer
-{
-	public:
-		Timer(): n(0) { }
-		void start(std::string label)
-		{
-			if (n < 20)
-			{ labels[n] = label; times[2*n] = clock(); }
-			else { std::cerr << "No more timers, " << label
-				<< " will not be timed." << std::endl; }
-		}
-		void stop() { times[2*n+1] = clock(); n++;}
-		void reset() { n=0; }
-		void print();
-	private:
-		std::string labels[20];
-		float times[40];
-		int n;
-};
-
-void Timer::print()
-{
-	std::cout << std::endl;
-	std::cout << "Action	::	time/s Time resolution = " << 1.f/(float)CLOCKS_PER_SEC << std::endl;
-	std::cout << "------" << std::endl;
-	for (int i=0; i < n; ++i)
-		std::cout << labels[i] << " :: " << (times[2*i+1] - times[2*i+0])/(float)CLOCKS_PER_SEC << std::endl;
-}
-
-typedef std::vector<std::vector<float>> Array2D;
 
 void initialize (float* x, int n){
 	int n2 = n+2;
@@ -51,30 +19,28 @@ void initialize (float* x, int n){
 void smooth (float* y, float* x, int n, 
 			float a, float b, float c){
 	int j;
-	int n2 = n+2;
-#pragma omp for private(j)
+#pragma omp for private(j) schedule(dynamic, 10000)
 	for (int i=1; i<=n; i++){
 //#pragma omp for 
 		for (j=1; j<=n; j++){
-			y[i*n2 + j] = a * (x[(i-1)*n2+(j-1)] + 
-								x[(i-1)*n2+(j+1)] + 
-								x[(i+1)*n2+(j-1)] + 
-								x[(i+1)*n2+(j+1)])
-						+ b * (x[(i-1)*n2+j] + 
-								x[(i+1)*n2+j] + 
-								x[i*n2+(j-1)] + 
-								x[i*n2+(j+1)]) 
-						+ c * x[i*n2+j];
+			y[i*(n+2) + j] = a * (x[(i-1)*(n+2)+(j-1)] + 
+								x[(i-1)*(n+2)+(j+1)] + 
+								x[(i+1)*(n+2)+(j-1)] + 
+								x[(i+1)*(n+2)+(j+1)])
+						+ b * (x[(i-1)*(n+2)+j] + 
+								x[(i+1)*(n+2)+j] + 
+								x[i*(n+2)+(j-1)] + 
+								x[i*(n+2)+(j+1)]) 
+						+ c * x[i*(n+2)+j];
 		}
 	}
-	//FUNC_END_TIMER;
 }
 
 void count(float* x, const int n, const float t, int &res){
 	//the boundary is not considered
 	int j;
 	int n2 = n+2;
-#pragma omp for private(j)
+#pragma omp for private(j) 
 	for (int i=1; i <= n; i++){
 //#pragma omp for
 		for (j=1; j <= n; j++){
@@ -91,12 +57,16 @@ int main(){
 	{
 		std::cout << omp_get_thread_num() << std::endl;
 	}
-
-	/* timer of class Timer */
-	Timer timer, timer2;
+	
+	int num_of_threads;
+#pragma omp parallel
+#pragma omp single
+	{
+		num_of_threads = omp_get_num_threads();
+	}
 
 	//size of matrix (nxn)
-	int n = 1 << 14;
+	int n = 1 << 15;
 	int nbx=0, nby=0;
 
 	//convolution constants
@@ -121,32 +91,38 @@ int main(){
 	//initialize x
 	initialize(x, n);	
 	
+	typedef std::chrono::high_resolution_clock Time;
+	typedef std::chrono::milliseconds ms;
+	typedef std::chrono::duration<float> fsec;
+
+	
+	
+	auto t1 = std::chrono::high_resolution_clock::now();
+
 	//smooth matrix x
-	timer.start("CPU: smooth");
 #pragma omp parallel
 	{
 	smooth(y, x, n, a, b, c);
 	}
-	timer.stop();
+	auto t2 = std::chrono::high_resolution_clock::now();
+	auto t_cnt = std::chrono::high_resolution_clock::now();
 
-	
-	timer2.start("CPU: Count-XY");
-	  timer.start("CPU: Count-X");
 #pragma omp parallel reduction(+:nbx)
 	  {
 	  count(x, n, t, nbx);
 	  }
-	  timer.stop();
-	  timer.start("CPU: Count-Y");
+	auto t_cnt_x = std::chrono::high_resolution_clock::now();
 #pragma omp parallel reduction(+:nby)
 	  {
 	  count(y, n, t, nby);
 	  }
-	  timer.stop();
-	timer2.stop();
+	auto t_cnt_y = std::chrono::system_clock::now();
 
-	timer.print();
-	timer2.print();
+
+    fsec t_smooth = t2 - t1;
+	fsec t_count_x = t_cnt_x-t_cnt;
+	fsec t_count_y = t_cnt_y-t_cnt_x;
+
 
 	//count elements in first array
 	//count(x, n, t, nbx);
@@ -159,7 +135,7 @@ int main(){
 	std::cout << std::endl;
 	std::cout << "Summary" << std::endl;
 	std::cout << "-------" << std::endl;
-	std::cout << "Number of threads		::"	<< omp_get_num_threads() << std::endl;
+	std::cout << "Number of threads		::"	<< num_of_threads << std::endl;
 	std::cout << "Number of elements in a row/column		::" << n+2 << std::endl;
 	std::cout << "Number of inner elements in a row/column	::" << n << std::endl;
 	std::cout << "Total number of elements					::" << (n+2)*(n+2) << std::endl;
@@ -176,6 +152,9 @@ int main(){
 
 
 
+	std::cout << "smooth time   ::" << t_smooth.count() << std::endl;
+	std::cout << "count-x time  ::" << t_count_x.count() << std::endl;
+	std::cout << "count-y time  ::" << t_count_y.count() << std::endl;
 
 	return 0;
 }
