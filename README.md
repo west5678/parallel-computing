@@ -1,1 +1,1 @@
-Homework repo for parallel computing class
+Homework for parallel computing class

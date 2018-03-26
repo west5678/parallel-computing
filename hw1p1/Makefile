@@ -1,15 +1,13 @@
 # Files
-EXEC:= hw0
-SRC := $(wildcard *.cpp)
-OBJ := $(patsubst %.cpp,%.o,$(SRC))
+EXEC:= hw1
+SRC := hw1.cpp
+OBJ := hw1.o
 # Options
-CC := icc 
+CC := icpc 
 CXXFLAGS := -std=c++11 -O2 -xHost -qopenmp
 # Rules
-$(EXEC) : $(OBJ)
-		$(CC) $(LDFLAGS) $(LDLIBS) -o $@ $^
-%.o : %.cpp
-		$(CC) $(CXXFLAGS) -c $<
+$(EXEC) : $(SRC)
+		$(CC) $(CXXFLAGS) -o $@ $^
 # Useful phony targets
 .PHONY: clobber clean neat echo
 clobber: clean

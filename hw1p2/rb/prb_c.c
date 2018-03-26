@@ -12,28 +12,46 @@ int main() {
   int i, nt=1, niter=0;
   double a[N], error=0.0, sum;
 
-  double time, t0, t1, tmp0, tmp1;
+  double time, t0, t1;//, tmp0, tmp1;
 
 #ifdef _OPENMP
 #pragma omp parallel private(nt)
 { nt = omp_get_num_threads(); if(nt<1) printf("NO print, OMP warmup.\n"); }
 #endif
 
-#pragma omp parallel for
+#pragma omp parallel
+{
+#pragma omp for
    for(i = 0; i < N-1; i+=2) {a[i]   = 0.0; a[i+1] = 1.0;}
     
    t0 = gtod_timer();
-   #pragma omp parallel
-   {
    do {
-	  #pragma omp for schedule (runtime) private(tmp1, tmp0)
+
+/*
+#pragma omp for schedule(runtime)
+	  for (i = 1; i < N;   i+=2) a[i] = (a[i] + a[i-1]) / 2.0;
+
+#pragma omp for schedule(runtime)
+	  for (i = 0; i < N-1; i+=2) a[i] = (a[i] + a[i+1]) / 2.0;
+*/
+
+
+#pragma omp for schedule (runtime) // private(tmp1, tmp0)
+      for (i = 1; i < N;   i+=2){
+		  a[i] = (a[i] + a[i-1]) / 2.0;
+		  a[i-1] = (a[i-1]+a[i]) / 2.0;
+	  }
+
+
+/*
+#pragma omp for schedule (runtime) private(tmp1, tmp0)
       for (i = 1; i < N;   i+=2){
 		  tmp0 = a[i-1];
 		  tmp1 = a[i]; 
 		  a[i-1] = tmp0*0.75 + tmp1*0.25;
 		  a[i] = tmp0*0.5 + tmp1*0.5;
 	  }
-
+*/
       
       #pragma omp single
 	  {
@@ -44,9 +62,10 @@ int main() {
 	  for (i = 0; i < N-1; i++) error = error + fabs(a[i] - a[i+1]);
        
    } while (error >= 1.0);
-   }
+   
 
    t1 = gtod_timer();
+}
    time  = t1 - t0;
 
    printf("%lf\n",time);

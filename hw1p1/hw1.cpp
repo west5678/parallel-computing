@@ -2,75 +2,49 @@
 #include <omp.h>
 #include <vector>
 #include <stdlib.h>
-
+#include <chrono>
 #include<sys/time.h>
 #include<time.h>
 
 
-//timer class
-class Timer
-{
-	public:
-		Timer(): n(0) { }
-		void start(std::string label)
-		{
-			if (n < 20)
-			{ labels[n] = label; times[2*n] = clock(); }
-			else { std::cerr << "No more timers, " << label
-				<< " will not be timed." << std::endl; }
-		}
-		void stop() { times[2*n+1] = clock(); n++;}
-		void reset() { n=0; }
-		void print();
-	private:
-		std::string labels[20];
-		float times[40];
-		int n;
-};
-
-void Timer::print()
-{
-	std::cout << std::endl;
-	std::cout << "Action	::	time/s Time resolution = " << 1.f/(float)CLOCKS_PER_SEC << std::endl;
-	std::cout << "------" << std::endl;
-	for (int i=0; i < n; ++i)
-		std::cout << labels[i] << " :: " << (times[2*i+1] - times[2*i+0])/(float)CLOCKS_PER_SEC << std::endl;
-}
-
-typedef std::vector<std::vector<float>> Array2D;
-
-void initialize (Array2D& x, int n){
+void initialize (float* x, int n){
 	int n2 = n+2;
 	for (int i = 0; i < n2; i++){
 		for (int j = 0; j < n2; j++){
-			x[i][j] = ( (float)rand()/ (RAND_MAX) );
+			x[i*n2+j] = ( (float)rand()/ (RAND_MAX) );
 		}
 	}
 }
 
-void smooth (Array2D& y, const Array2D x, int n, float a, float b, 
-	float c){
-	int i, j;
-#pragma omp for private(j) schedule(static)
-	for (i=1; i<=n; i++){
-		//std::cout << i << std::endl;
+void smooth (float* y, float* x, int n, 
+			float a, float b, float c){
+	int j;
+#pragma omp for private(j) schedule(runtime)
+	for (int i=1; i<=n; i++){
 //#pragma omp for 
 		for (j=1; j<=n; j++){
-			y[i][j] = a * (x[i-1][j-1] + x[i-1][j+1] + x[i+1][j-1]+ x[i+1][j+1]) 					+ b * (x[i-1][j] + x[i+1][j] + x[i][j-1] + x[i][j+1]) 
-					+ c * x[i][j];
+			y[i*(n+2) + j] = a * (x[(i-1)*(n+2)+(j-1)] + 
+								x[(i-1)*(n+2)+(j+1)] + 
+								x[(i+1)*(n+2)+(j-1)] + 
+								x[(i+1)*(n+2)+(j+1)])
+						+ b * (x[(i-1)*(n+2)+j] + 
+								x[(i+1)*(n+2)+j] + 
+								x[i*(n+2)+(j-1)] + 
+								x[i*(n+2)+(j+1)]) 
+						+ c * x[i*(n+2)+j];
 		}
 	}
-	//FUNC_END_TIMER;
 }
 
-void count(const Array2D x, const int n, const float t, int &res){
+void count(float* x, const int n, float t, int &res){
 	//the boundary is not considered
 	int j;
+	int n2 = n+2;
 #pragma omp for private(j)
 	for (int i=1; i <= n; i++){
 //#pragma omp for
 		for (j=1; j <= n; j++){
-			if (x[i][j] < t){
+			if (x[i*n2+j] < t){
 				res ++;
 			}
 		}
@@ -78,28 +52,27 @@ void count(const Array2D x, const int n, const float t, int &res){
 }
 
 int main(){
-	int num_thread;
+
 	#pragma omp parallel
 	{
-		std::cout << omp_get_num_procs() << std::endl;
-	}
-
-	int num_of_threads;
-#pragma omp parallel 
-	#pragma omp single
-	{
-	num_of_threads = omp_get_num_threads();
+		std::cout << omp_get_thread_num() << std::endl;
 	}
 	
-	/* timer of class Timer */
-	Timer timer, timer2;
+	int num_of_threads;
+#pragma omp parallel
+#pragma omp single
+	{
+		num_of_threads = omp_get_num_threads();
+	}
 
 	//size of matrix (nxn)
-	int n = 1 << 14;
+	int n = 1 << 15;
 	int nbx=0, nby=0;
 
 	//convolution constants
-	float a, b, c, t;
+	float a, b, c, 
+		  t,
+		  *x, *y;
 	a = 0.05;
 	b = 0.1;
 	c = 0.4;
@@ -107,36 +80,48 @@ int main(){
 	//threshold t
 	t = 0.1;
 
+	x = new float[(n+2)*(n+2)];
 	//allocate x
-	Array2D x(n+2, std::vector<float>(n+2));
+	//Array2D x(n+2, std::vector<float>(n+2));
 
+	y = new float[(n+2)*(n+2)];
 	//allocate y
-	Array2D y(n+2, std::vector<float>(n+2));
+	//Array2D y(n+2, std::vector<float>(n+2));
 
 	//initialize x
 	initialize(x, n);	
 	
+	typedef std::chrono::high_resolution_clock Time;
+	typedef std::chrono::milliseconds ms;
+	typedef std::chrono::duration<float> fsec;
+
+	
+	
+	auto t1 = std::chrono::high_resolution_clock::now();
+
 	//smooth matrix x
-	//timer.start("CPU: smooth");
-	double t1 = omp_get_wtime();
 #pragma omp parallel
 	{
 	smooth(y, x, n, a, b, c);
 	}
-	double t2 = omp_get_wtime();
-	//timer.stop();
+	auto t2 = std::chrono::high_resolution_clock::now();
+	auto t_cnt = std::chrono::high_resolution_clock::now();
 
-	double t_cnt = omp_get_wtime();	
 #pragma omp parallel reduction(+:nbx)
 	  {
 	  count(x, n, t, nbx);
 	  }
-	double t_cnt_x = omp_get_wtime();
+	auto t_cnt_x = std::chrono::high_resolution_clock::now();
 #pragma omp parallel reduction(+:nby)
 	  {
 	  count(y, n, t, nby);
 	  }
-	double t_cnt_y = omp_get_wtime();
+	auto t_cnt_y = std::chrono::system_clock::now();
+
+
+    fsec t_smooth = t2 - t1;
+	fsec t_count_x = t_cnt_x-t_cnt;
+	fsec t_count_y = t_cnt_y-t_cnt_x;
 
 
 	//count elements in first array
@@ -166,9 +151,10 @@ int main(){
 	std::cout << "Fraction of elements below threshold		::" << nby / (float)(n*n) << std::endl;
 
 
-	std::cout << "smooth time	::" << t2 - t1 << std::endl;
-	std::cout << "count-x time	::" << t_cnt_x - t_cnt << std::endl;
-	std::cout << "count-y time	::" << t_cnt_y - t_cnt_x << std::endl;
+
+	std::cout << "smooth time   ::" << t_smooth.count() << std::endl;
+	std::cout << "count-x time  ::" << t_count_x.count() << std::endl;
+	std::cout << "count-y time  ::" << t_count_y.count() << std::endl;
 
 	return 0;
 }
