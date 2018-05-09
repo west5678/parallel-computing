@@ -1,0 +1,8 @@
+set(DEAL_II_DIR "/work/02805/alisamii/lonestar/my_libs/dealii85/install")
+set(EIGEN_INC "/work/02805/alisamii/lonestar/my_libs/eigen/eigen_3_3_02")
+set(BOOST_INC "/opt/apps/intel16/boost/1.59/include")
+
+include_directories(${INCLUDE_DIRECTORIES}
+                    ${CMAKE_SOURCE_DIR}
+                    ${EIGEN_INC})
+link_directories(${LINK_DIRECTORIES} ${COMPILER_LIB})
